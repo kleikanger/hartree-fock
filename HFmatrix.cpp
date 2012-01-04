@@ -1,6 +1,7 @@
 /*
 
-balblabla
+Some parameters defined in the constructor HFmatrix::HFmatrix. Should be taken as argument.
+Class methods, objects, .... called from main. Can be moved to other program.
 
    */
 
@@ -26,19 +27,20 @@ double hFMatrixElements(int ,int ,int ,int ,int ,int ,double, double);
 HFmatrix::HFmatrix(int nCutoff){ //XXX May need more parameters as input. 
 //startvimfold
 
-	nCutoff=2;
+	nCutoff=2; // XXX remove
 	
 	//XXX Should may be part of constructor call?
 	iNumberOfParticles=2*nCutoff;
 	//There might be a lot of round off error with to many terms because of roundofferror in the integration routine.	
 	//For some reason, david's integrationroutine with two separate inner and outer integrals converged much faster (?).
-
-	iNrMeshpt=5000;
+	
+	//Calc of matrix elements O(iNrMeshpt**2) 
+	iNrMeshpt=1500;
 	dIntLimMin=0.0;
 	dIntLimMax=250.0;
 	
 	double **ddUnity;
-	
+
     //Declare elements of variable:coulombIntegrals:
     coulombIntegrals = new double***[nCutoff];
 	    for (int i = 0; i < nCutoff; i++) {
@@ -70,16 +72,11 @@ HFmatrix::HFmatrix(int nCutoff){ //XXX May need more parameters as input.
 					hFMatrixElements(n1+1, n2+1, n3+1, n4+1,iNumberOfParticles,iNrMeshpt,dIntLimMin,dIntLimMax);
 					cout<<coulombIntegrals[n3][n2][n1][n4]<<"\t";
 					}
-					cout<<"\n";
+					cout<<".\n";
 			    }
 		 	}
 		}
 	
-	#if PRINT
-	cout<< "laguerre "<<LaguerreGeneral(2 - 1, 1, 2.0*4.0*  2.0  /((double) 2))<<"\t\t,";
-	cout<< "radialwf" <<radialWF(2,1.,4)<<"\n";
-	#endif
-
 	//Declaring and constructing unity matrix	
   	ddUnity = (double **) matrix( iNumberOfParticles, iNumberOfParticles , sizeof(double));
 	for (int a=0; a< iNumberOfParticles; a++){
@@ -88,29 +85,23 @@ HFmatrix::HFmatrix(int nCutoff){ //XXX May need more parameters as input.
  			ddUnity[a][b]=ddUnity[b][a]=0.0;
 		}
 	}
-	
 	//initializing eigenvalues(energies) of orbitals
-	for (int i = 0; i < iNumberOfParticles; i++) {
+	pOrbitalEnergies = new double[iNumberOfParticles];
+	for (int i = 0; i < iNumberOfParticles/2; i++) {
 		pOrbitalEnergies[i] = -((double) (iNumberOfParticles*iNumberOfParticles))/((double) (2*(i+1)*(i+1))); //iNumberOfParticles really Z!!
 	}
     
 	//Declare elements of variable:ppHFdata
  	ppHFdata= (double **) matrix( iNumberOfParticles, iNumberOfParticles, sizeof(double));
-
+	
 	//Finding initial matrix
 	transform(ddUnity);
+	
 	#if A
 	//Prin test
 	for (int i=0;i<4;i++){
 		for (int j=0;j<4;j++){
 		cout<<", \t"<<ppHFdata[i][j];
-		}
-	cout<<"\n";
-	}
-
-	for (int i=0;i<4;i++){
-		for (int j=0;j<4;j++){
-		cout<<", \t"<<ddUnity[i][j];
 		}
 	cout<<"\n";
 	}
@@ -153,10 +144,12 @@ void HFmatrix::transform(double ** ddUnitaryMatrix){
 			}
 		}
 	}
+	
 	//Second part: Adding eigenenergies of basis states.
 	for (int i=0;i<iNumberOfParticles;i++){
 		ppHFdata[i][i]+=pOrbitalEnergies[i/2];
-	}	
+	}
+
 }//End of void HFmatrix::transform 
 //endvimfold
 
@@ -328,11 +321,13 @@ double LaguerreGeneral( int n, double alpha, double x){
 
 int main(){
 //startvimfold 
-int iNumberOfParticles=4;
+
+//Only needed in this method
+	int iNumberOfParticles=4;
 
 //declaring and constructing nxn matrix	
-double **ddUnitaryMatrix;
-ddUnitaryMatrix = (double **) matrix( iNumberOfParticles, iNumberOfParticles , sizeof(double));
+	double **ddUnitaryMatrix;
+	ddUnitaryMatrix = (double **) matrix( iNumberOfParticles, iNumberOfParticles , sizeof(double));
 /*for (int a=0; a< inumberofparticles; a++){
 	ddunitarymatrix[a][a]=1.0;
 	for (int b=a+1; b< inumberofparticles; b++){
@@ -340,62 +335,72 @@ ddUnitaryMatrix = (double **) matrix( iNumberOfParticles, iNumberOfParticles , s
 	}
 }*/
 
-double* pEigenvalues = new double[iNumberOfParticles];
-double* pEigenvaluesOld = new double[iNumberOfParticles];
+	double* pEigenvalues = new double[iNumberOfParticles];
+	double* pEigenvaluesOld = new double[iNumberOfParticles];// = new double[iNumberOfParticles];
+			for (int i = 0; i < iNumberOfParticles; i++){
+				pEigenvaluesOld[i] = 0; 	
+			}
 
-#if 0
-if (iNumberOfIterations>1){
-	for (int i = 0; i < iNumberOfParticles i++){
-		for (int j = 0; j < iNumberOfParticles; j++){
-			pEigenvaluesOld[i][j] = pEigenvalues[i][j] 	
-		}
-	}
-}
-#endif
+	bool bIterate = true;
+	int iNumberOfIterations = 0;
+	int iConverged;
 
-HFmatrix A(2);
+
+
+	//Initializing hartree-fock matrix object
+	HFmatrix A(2);
+	
+	//Start iterations
+	while (bIterate) {
+//		bIterate=false; //XXX XXX remove !!
+
 //A.transform(ddUnity);
-A.diagonalize(pEigenvalues,ddUnitaryMatrix);
-A.transform(ddUnitaryMatrix);
-A.diagonalize(pEigenvalues,ddUnitaryMatrix);
-A.transform(ddUnitaryMatrix);
-A.diagonalize(pEigenvalues,ddUnitaryMatrix);
-A.transform(ddUnitaryMatrix);
-A.diagonalize(pEigenvalues,ddUnitaryMatrix);
-
-#if 0
-if (iNumberOfIterations>1){
-	for {int i = 0; i < iNumberOfParticles i++){
-		for (int j = 0; j < iNumberOfParticles; j++){
-			pEigenvaluesOld[i][j] = pEigenvalues[i][j] 	
+		A.diagonalize(pEigenvalues,ddUnitaryMatrix);
+		A.transform(ddUnitaryMatrix);
+//A.diagonalize(pEigenvalues,ddUnitaryMatrix);
+//A.transform(ddUnitaryMatrix);
+//A.diagonalize(pEigenvalues,ddUnitaryMatrix);
+//A.transform(ddUnitaryMatrix);
+//A.diagonalize(pEigenvalues,ddUnitaryMatrix);
+#if 1
+		if (iNumberOfIterations>0){
+#endif
+#if 1			
+			iConverged = 0;
+			for (int i = 0; i < iNumberOfParticles; i++) {
+				if (abs((pEigenvaluesOld[i] - pEigenvalues[i])/pEigenvalues[i]) < 1e-6) { //init tol on top of program
+					iConverged++;
+				}
+			}
+			if (iConverged == iNumberOfParticles) {
+				bIterate = false;
+			}
+			for (int i = 0; i < iNumberOfParticles; i++){
+				pEigenvaluesOld[i] = pEigenvalues[i]; 	
+			}
 		}
-	}
-}
 #endif
+		iNumberOfIterations++;
+	}//End of while (bIterate)
 
-#if 0
-for (int nt nConverged = 0;
-	for (int i = 0; i < iNumberOfParticles; i++) {
-		if (abs((dPrevious[i] - d[i])/d[i]) < 1e-6) { //init tol on top of program
-		nConverged++;
-	}
-}
-#endif
+cout << "Antall iterasjoner = " << iNumberOfIterations;
 
-#if 0
-if (nConverged == 2*nCutoff) {
-	converged = true;
-}
+//Calculate energy
+	//HFmatrix::<method> needed for calculating energy
+	//method needed for writing data to file
 
-} //while loos stops here; while (convergence)
-#endif
+//Write comments
 
-for (int i=0;i<4;i++){
+//TESTING
+/*for (int i=0;i<4;i++){
 for (int j=0;j<4;j++){
 cout<<", \t\t"<<ddUnitaryMatrix[i][j];
 }
 	cout<<"\n";
 	}
+*/
+//delete[] pEigenvalues;
+//delete[] pEigenvaluesOld;
 }//End of Main().
 //endvimfold
 

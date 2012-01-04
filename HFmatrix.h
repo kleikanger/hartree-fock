@@ -9,7 +9,7 @@ class HFmatrix{
 	int iNrMeshpt;
     double dIntLimMin;
     double dIntLimMax;
-	double* pOrbitalEnergies;
+	double* pOrbitalEnergies;;
 
 	//Methods
 
