@@ -298,7 +298,7 @@ cout<<", \t\t"<<ddUnitaryMatrix[i][j];
 
 //Finding <ab|V|cd>
 double hFMatrixElements(int iNa,int iNb,int iNc,int iNd,int iNumberOfParticles, int iNrMeshpt, double dIntLimMin, double dIntLimMax){
-#if 1
+#if 0
 	int n1,n2,n3,n4,Z,N; 
 	n1=iNa;
 	n2=iNb;
@@ -363,6 +363,8 @@ int Z=4;
 }
 #else
 
+	//Double integral over 2. integral will give a few percent extra accuracy
+
 	double *W = new double[iNrMeshpt];
    	double *X = new double[iNrMeshpt];	
 
@@ -380,20 +382,20 @@ int Z=4;
 	//Summation over all meshpoints
 	for (int x_1=0;x_1<iNrMeshpt;x_1++){
 
-		//Computing the different factors in the integrand		
-		dInt1 = W[x_1] * X[x_1] *  radialWF(X[x_1],iNa,iZ) * radialWF(X[x_1],iNc,iZ);
-		dInt2 = dInt1 * X[x_1];
-
 		for (int x_2=0;x_2<iNrMeshpt;x_2++){
 	
 			//Computing the different factors in the integrand		
-			dInnerint = radialWF(X[x_2],iNb,iZ) * radialWF(X[x_2],iNd,iZ);
+			//dInnerint = radialWF(X[x_2],iNb,iZ) * radialWF(X[x_2],iNd,iZ);
 			
 			//When x_1=x_2, the integrands are the same.		
-			if (X[x_1]<X[x_2]) {
-				dInt_gl += dInt1 * W[x_2] * X[x_2] * X[x_2] * dInnerint;//
+			if (x_1>x_2) {
+				//dInt_gl += dInt1 * W[x_2] * X[x_2] * X[x_2] * dInnerint;//
+				dInt_gl += W[x_1] * W[x_2] * X[x_1] * X[x_2] * X[x_2] * radialWF(X[x_1],iNa,iZ) * radialWF(X[x_2],iNb,iZ)
+										      * radialWF(X[x_1],iNc,iZ) * radialWF(X[x_2],iNd,iZ);
 			} else {
-				dInt_gl += dInt2 * W[x_2] * X[x_2] * dInnerint;//
+				//dInt_gl += dInt2 * W[x_2] * X[x_2] * dInnerint;//
+				dInt_gl += W[x_1] * W[x_2] * X[x_1] * X[x_1] * X[x_2] * radialWF(X[x_1],iNa,iZ) * radialWF(X[x_2],iNb,iZ)
+										      * radialWF(X[x_1],iNc,iZ) * radialWF(X[x_2],iNd,iZ);
 			}
 		}
 	}
