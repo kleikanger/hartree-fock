@@ -352,20 +352,11 @@ int main(){
 	
 	//Start iterations
 	while (bIterate) {
-//		bIterate=false; //XXX XXX remove !!
 
-//A.transform(ddUnity);
 		A.diagonalize(pEigenvalues,ddUnitaryMatrix);
 		A.transform(ddUnitaryMatrix);
-//A.diagonalize(pEigenvalues,ddUnitaryMatrix);
-//A.transform(ddUnitaryMatrix);
-//A.diagonalize(pEigenvalues,ddUnitaryMatrix);
-//A.transform(ddUnitaryMatrix);
-//A.diagonalize(pEigenvalues,ddUnitaryMatrix);
-#if 1
 		if (iNumberOfIterations>0){
-#endif
-#if 1			
+			
 			iConverged = 0;
 			for (int i = 0; i < iNumberOfParticles; i++) {
 				if (abs((pEigenvaluesOld[i] - pEigenvalues[i])/pEigenvalues[i]) < 1e-6) { //init tol on top of program
@@ -379,7 +370,7 @@ int main(){
 				pEigenvaluesOld[i] = pEigenvalues[i]; 	
 			}
 		}
-#endif
+	
 		iNumberOfIterations++;
 	}//End of while (bIterate)
 
@@ -399,8 +390,8 @@ cout<<", \t\t"<<ddUnitaryMatrix[i][j];
 	cout<<"\n";
 	}
 */
-//delete[] pEigenvalues;
-//delete[] pEigenvaluesOld;
+delete[] pEigenvalues;
+delete[] pEigenvaluesOld;
 }//End of Main().
 //endvimfold
 
