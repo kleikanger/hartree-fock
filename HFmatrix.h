@@ -9,10 +9,12 @@ class HFmatrix{
 	int iNrMeshpt;
     double dIntLimMin;
     double dIntLimMax;
+	double* pOrbitalEnergies;
+
+	//Methods
 
 	public:
 	//member variables
-	double* pOrbitalEnergies;
 
 	//Methods (member functions)
 	HFmatrix(int);

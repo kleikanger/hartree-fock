@@ -4,7 +4,8 @@ balblabla
 
    */
 
-
+//if PRINT == true some results will be printed
+#define PRINT true
 
 #include <iostream>
 #include "lib/lib.h"
@@ -13,25 +14,26 @@ balblabla
 
 double calculateInnerIntegrals(double , int , int );  //REMOVE!
 
-	
 using std::cout;
 
-
-//Not programmed by me.
+//Function not programmed by me (MH-J?).
 double LaguerreGeneral(int,double,double);
-//Programmed by me
+//Functions programmed by me
 double radialWF(double,int,int);
-//double gaussianQuadrature(double,double,int,int,int,int,int,int); 
 double hFMatrixElements(int ,int ,int ,int ,int ,int ,double, double);
 
-//Constructs Hartre-Fock (nCutoff x nCutoffx) martix
-HFmatrix::HFmatrix(int nCutoff){
+//Constructs Hartre-Fock (iNumberOfParticles x iNumberOfParticles ) martix
+HFmatrix::HFmatrix(int nCutoff){ //XXX May need more parameters as input. 
+//startvimfold
 
 	nCutoff=2;
 	
 	//XXX Should may be part of constructor call?
 	iNumberOfParticles=2*nCutoff;
-	iNrMeshpt=250;
+	//There might be a lot of round off error with to many terms because of roundofferror in the integration routine.	
+	//For some reason, david's integrationroutine with two separate inner and outer integrals converged much faster (?).
+
+	iNrMeshpt=5000;
 	dIntLimMin=0.0;
 	dIntLimMax=250.0;
 	
@@ -52,7 +54,11 @@ HFmatrix::HFmatrix(int nCutoff){
 			}
 		}	
 	
-	//Initialize elements of variable:coulombIntegrals
+	/*Initialize elements of variable:coulombIntegrals
+  	finds hartree and fock part of the  matrixelement (<ab|cd>) by integratian of the direct and exchange term.
+  	remember that interchange of the terms a,c and b,d will give the same results. therefore only some of the 
+	elements of the  matrix will be neccasary to compute. this fact can be shown analytically (easily).
+ 	*/
 	    for (int n1 = 0; n1 < nCutoff; n1++) {
 			for(int n2 = 0; n2 < nCutoff; n2++) {
 	            for(int n3 = n1; n3 < nCutoff; n3++) {
@@ -68,10 +74,11 @@ HFmatrix::HFmatrix(int nCutoff){
 			    }
 		 	}
 		}
-
+	
+	#if PRINT
 	cout<< "laguerre "<<LaguerreGeneral(2 - 1, 1, 2.0*4.0*  2.0  /((double) 2))<<"\t\t,";
 	cout<< "radialwf" <<radialWF(2,1.,4)<<"\n";
-
+	#endif
 
 	//Declaring and constructing unity matrix	
   	ddUnity = (double **) matrix( iNumberOfParticles, iNumberOfParticles , sizeof(double));
@@ -92,8 +99,8 @@ HFmatrix::HFmatrix(int nCutoff){
 
 	//Finding initial matrix
 	transform(ddUnity);
-#if 0
-	//Prin XXX test
+	#if A
+	//Prin test
 	for (int i=0;i<4;i++){
 		for (int j=0;j<4;j++){
 		cout<<", \t"<<ppHFdata[i][j];
@@ -107,26 +114,33 @@ HFmatrix::HFmatrix(int nCutoff){
 		}
 	cout<<"\n";
 	}
-#endif
-//XXX SLETT ARRAYS!
+	#endif
+	//XXX SLETT ARRAYS!
 
 }//END of constructor HFmatrix
+//endvimfold
 	
+//Uses the elements in the coulomn interaction matrix (HFdata), and the unitary matrix
+//plus the orbital energies to construct a new unitary matric. Recoves small terms, and sorts
+//the eigenenergies and corresponding eigenvectors, smallest elements first, for more stable 
+//householder, QLDC (??) in the next iteration.
 void HFmatrix::transform(double ** ddUnitaryMatrix){
+//startvimfold
+
+	//Temporary variables
+	double Atemp;
+	double Btemp;
 	
+	//First part; Coulomb energies. (Hartree and Fock energies)
 	for (int alpha = 0; alpha < iNumberOfParticles; alpha++) {
 		for (int gamma = 0; gamma < iNumberOfParticles; gamma++) {
-    		// Bidraget fra Coulomb-matriseelementet:
 			ppHFdata[alpha][gamma] = 0;
 			for (int a = 0; a < iNumberOfParticles; a++) {
 				for (int beta = 0; beta < iNumberOfParticles; beta++) {
 					for (int delta = 0; delta < iNumberOfParticles; delta++) {
-                		
-						double Atemp=0.0;
-						double Btemp=0.0;
-						
-						//XXX Following should be stated as a function later. will be used every iteration.
-						//Need to check if states are perpendicular (because of different spinstates)
+						//Need to ensure that 13 and 24 has same spin (correct acc. to the convention in this code).
+						Atemp=0.0;
+						Btemp=0.0;
 						if ( alpha%2==delta%2 && beta%2==gamma%2 ){
 						        Btemp = coulombIntegrals[alpha/2][beta/2][delta/2][gamma/2];
 							}
@@ -139,32 +153,30 @@ void HFmatrix::transform(double ** ddUnitaryMatrix){
 			}
 		}
 	}
-	//Adding eigenenergies
+	//Second part: Adding eigenenergies of basis states.
 	for (int i=0;i<iNumberOfParticles;i++){
 		ppHFdata[i][i]+=pOrbitalEnergies[i/2];
 	}	
-	
-
-
 }//End of void HFmatrix::transform 
-
-
+//endvimfold
 
 //Changes rows of ddUnitaryMatrix to eigenvectors and pEigenvalues to the eigenvalues the HF-matrix
 //Sorting eigenvalues in ddUnitaryMatrix
 void HFmatrix::diagonalize(double* pEigenvalues, double** ddUnitaryMatrix){
+//startvimfold
 
-	//Should modify tred2,tqli instead of declareing this array
+	//Temporary variable. Needed because of the way tred2 and tqli are programmed in lib.cpp
 	double ddTrigonalMatrix[iNumberOfParticles];
 
 	tred2(ppHFdata, iNumberOfParticles, pEigenvalues, ddTrigonalMatrix);
 	tqli(pEigenvalues, ddTrigonalMatrix, iNumberOfParticles, ppHFdata);
 
 	/*picksort:Num.Rec. inspired algo.
+	O(n2). Not good for large iNumberOfParticles.
 	Sorting dEigenvalues and pEigenvalues
 	Smallest eigenvalues and corresponding eigenvectors first*/
 	
-	//Array with indexes
+	//Array containing indexes
 	int iSortIndex[iNumberOfParticles];
 	for (int i=0;i<iNumberOfParticles;i++){
 		iSortIndex[i]=i;
@@ -200,175 +212,32 @@ void HFmatrix::diagonalize(double* pEigenvalues, double** ddUnitaryMatrix){
 			}
 		}
 	}
-#if 1
+#if PRINT
+	cout.precision(10);
 	for (i=0;i<4;i++){
 	cout<<pEigenvalues[i]<<","<<iSortIndex[i]<<"\n";
 	}
 cout<<"\n\n\n";
 	for (i=0;i<4;i++){
 	for (j=0;j<4;j++){
-	cout<<ppHFdata[i][j]<<"\t\t";
+	cout<<ddUnitaryMatrix[i][j]<<"\t\t";
 	}cout<<"\n";	}
 cout<<"\n\n\n";
 #endif
 
-
 }//End of function HFmatrix::diagonalize: 
+//endvimfold
 
-
-
-
-
-
-/*Finds Hartree and Fock part of the  matrixelement iNa,iNb by integratian of the direct and exchange term.
-  Remember that interchange of the terms a and b will give the same results. therefore only the elements of one trigonal
-  part of the matrix will be neccasary to compute. This fact can be shown analytically (easily), but the calculation of the 
-  full matrix may not give a perfect symmetric matrix(??), and then we will have problems with the diag. (Househoulder) routine.
- */
-
-
-int main(){
-
-int iNumberOfParticles=4;
-
-
-
-//Declaring and constructing nxn matrix	
-double **ddUnitaryMatrix;
-ddUnitaryMatrix = (double **) matrix( iNumberOfParticles, iNumberOfParticles , sizeof(double));
-/*for (int a=0; a< iNumberOfParticles; a++){
-	ddUnitaryMatrix[a][a]=1.0;
-	for (int b=a+1; b< iNumberOfParticles; b++){
- 			ddUnitaryMatrix[a][b]=ddUnitaryMatrix[b][a]=0.0;
-	}
-}*/
-
-double* pEigenvalues = new double[iNumberOfParticles];
-double* pEigenvaluesOld = new double[iNumberOfParticles];
-
-
-
-#if 0
-if (iNumberOfIterations>1){
-	for (int i = 0; i < iNumberOfParticles i++){
-		for (int j = 0; j < iNumberOfParticles; j++){
-			pEigenvaluesOld[i][j] = pEigenvalues[i][j] 	
-		}
-	}
-}
-#endif
-
-HFmatrix A(2);
-//A.transform(ddUnity);
-A.diagonalize(pEigenvalues,ddUnitaryMatrix);
-
-#if 0
-if (iNumberOfIterations>1){
-	for {int i = 0; i < iNumberOfParticles i++){
-		for (int j = 0; j < iNumberOfParticles; j++){
-			pEigenvaluesOld[i][j] = pEigenvalues[i][j] 	
-		}
-	}
-}
-#endif
-
-#if 0
-for (int nt nConverged = 0;
-	for (int i = 0; i < 2*nCutoff; i++) {
-		if (abs((dPrevious[i] - d[i])/d[i]) < tol) { //init tol on top of program
-		nConverged++;
-	}
-}
-
-if (nConverged == 2*nCutoff) {
-	converged = true;
-}
-
-} //while loos stops here; while (convergence)
-#endif
-
-for (int i=0;i<4;i++){
-for (int j=0;j<4;j++){
-cout<<", \t\t"<<ddUnitaryMatrix[i][j];
-}
-	cout<<"\n";
-	}
-}//End of Main().
-
-
-//Finding <ab|V|cd>
+//Finding <ab|V|cd>. This is the heaviest operation. Must be rewritten for larger other systems. 
+//For large systems this operation should be done separately and stored. For basis functions with 3-dimensions
+//MC-calculation of the integral may be the only practical solution.
 double hFMatrixElements(int iNa,int iNb,int iNc,int iNd,int iNumberOfParticles, int iNrMeshpt, double dIntLimMin, double dIntLimMax){
-#if 0
-	int n1,n2,n3,n4,Z,N; 
-	n1=iNa;
-	n2=iNb;
-	n3=iNc;
-	n4=iNd;
-	Z=iNumberOfParticles;
-	N=250.0;
-	double intCutoff=250;
-
-	    double *x = new double[N]; // Integrasjonspunkter
-		double *w = new double[N]; // Integrasjonsvekter
-			    
-			    double integral = 0;
-				    gauleg(0, intCutoff, x, w, N); // Finner x og w
-					    for (int i = 0; i < N; i++) {
-							        integral += w[i]*x[i]*x[i]*radialWF(x[i], n1,Z)*
-										                    radialWF(x[i], n3,Z)*
-															                    calculateInnerIntegrals(x[i], n2, n4);
-									    }
-						    
-						    // Sletter:
-						    delete[] x;
-							    delete[] w;
-								    
-								    return integral;
-}
-
-/******************************************************************************/
-
-// Funksjon som beregner det indre integralet i Coulomb-integralene ved bruk
-// av Gauss-kvaderatur:
-double calculateInnerIntegrals(double r1, int n1, int n2) {
-int N=250;
-double intCutoff=250;
-int Z=4;
-	    double *x = new double[N]; // Integrasjonspunkter
-	    double *w = new double[N]; // Integrasjonsvekter
-			    
-	    // Første integral beregnes her (fra 0 til r1):
-	    double integral1 = 0;
-	    gauleg(0, r1, x, w, N); // Finner x og w
-			    for (int i = 0; i < N; i++) {
-				        integral1 += w[i]*x[i]*x[i]*radialWF(x[i], n1,Z)*
-					                     radialWF(x[i], n2,Z);
-			    }
-			    integral1 /= r1;
-							    
-			    // Andre integral beregnes her (fra r1 til intCutoff):
-			    double integral2 = 0;
-			    gauleg(r1, intCutoff, x, w, N); // Finner x og w
-				    for (int i = 0; i < N; i++) {
-				        integral2 += w[i]*x[i]*radialWF(x[i], n1,Z)*
-		                     radialWF(x[i], n2,Z);
-													    }
-										    
-			    // Sletter.
-			    delete[] x;
-			    delete[] w;
-								    
-			    // Returnerer svaret:
-			    return integral1 + integral2;
-}
-#else
-
-	//Double integral over 2. integral will give a few percent extra accuracy
+//startvimfold
 
 	double *W = new double[iNrMeshpt];
    	double *X = new double[iNrMeshpt];	
 
-	int iZ = iNumberOfParticles;
+	int iZ = iNumberOfParticles; //Really electric charge of core
 	
 	//Kaller funksjon som returnerer meshpunkter X og vekter W
 	gauleg(dIntLimMin,dIntLimMax,X,W,iNrMeshpt);
@@ -381,7 +250,10 @@ int Z=4;
 	
 	//Summation over all meshpoints
 	for (int x_1=0;x_1<iNrMeshpt;x_1++){
-
+		
+		dInt1 = W[x_1] * X[x_1] *  radialWF(X[x_1],iNa,iZ) * radialWF(X[x_1],iNc,iZ);
+		dInt2 = dInt1 * X[x_1];
+		
 		for (int x_2=0;x_2<iNrMeshpt;x_2++){
 	
 			//Computing the different factors in the integrand		
@@ -390,12 +262,10 @@ int Z=4;
 			//When x_1=x_2, the integrands are the same.		
 			if (x_1>x_2) {
 				//dInt_gl += dInt1 * W[x_2] * X[x_2] * X[x_2] * dInnerint;//
-				dInt_gl += W[x_1] * W[x_2] * X[x_1] * X[x_2] * X[x_2] * radialWF(X[x_1],iNa,iZ) * radialWF(X[x_2],iNb,iZ)
-										      * radialWF(X[x_1],iNc,iZ) * radialWF(X[x_2],iNd,iZ);
+				dInt_gl += dInt1 * W[x_2] * X[x_2] * X[x_2] * radialWF(X[x_2],iNb,iZ) * radialWF(X[x_2],iNd,iZ);
 			} else {
 				//dInt_gl += dInt2 * W[x_2] * X[x_2] * dInnerint;//
-				dInt_gl += W[x_1] * W[x_2] * X[x_1] * X[x_1] * X[x_2] * radialWF(X[x_1],iNa,iZ) * radialWF(X[x_2],iNb,iZ)
-										      * radialWF(X[x_1],iNc,iZ) * radialWF(X[x_2],iNd,iZ);
+				dInt_gl += dInt2 * W[x_2] * X[x_2] * radialWF(X[x_2],iNb,iZ) * radialWF(X[x_2],iNd,iZ);
 			}
 		}
 	}
@@ -405,11 +275,12 @@ int Z=4;
 	delete [] W;
 	
 	return dInt_gl;
-} 
-#endif
+}
+//endvimfold
 
 //Calculates radial part of the wavefunction.
 double radialWF(double dR, int iN, int iZ){
+//startvimfold
 
 	double dZN =  (double)iZ/(double)iN;
 	double dFac=1.0;
@@ -422,13 +293,14 @@ double radialWF(double dR, int iN, int iZ){
 			exp(-dZN*dR)*
 	 		LaguerreGeneral(iN - 1, 1, 2*dZN*dR );
 }
-
+//endvimfold
 
 /*  Function to compute generalized Laguerre polynomials
     alpha cannot be smaller or equal than  -1.0
     The variable n has to be larger or equal 0
 	*/
 double LaguerreGeneral( int n, double alpha, double x){
+//startvimfold
 	double *glaguerre; 
 	if ( alpha <= -1.0 ) {
 	    cout << "LAGUERRE_GENERAL - Fatal error!" << endl;
@@ -452,6 +324,80 @@ double LaguerreGeneral( int n, double alpha, double x){
 	delete [] glaguerre;
 	return GLaguerre;
 }   // end function glaguerre
+//endvimfold
 
+int main(){
+//startvimfold 
+int iNumberOfParticles=4;
 
+//declaring and constructing nxn matrix	
+double **ddUnitaryMatrix;
+ddUnitaryMatrix = (double **) matrix( iNumberOfParticles, iNumberOfParticles , sizeof(double));
+/*for (int a=0; a< inumberofparticles; a++){
+	ddunitarymatrix[a][a]=1.0;
+	for (int b=a+1; b< inumberofparticles; b++){
+ 			ddunitarymatrix[a][b]=ddunitarymatrix[b][a]=0.0;
+	}
+}*/
 
+double* pEigenvalues = new double[iNumberOfParticles];
+double* pEigenvaluesOld = new double[iNumberOfParticles];
+
+#if 0
+if (iNumberOfIterations>1){
+	for (int i = 0; i < iNumberOfParticles i++){
+		for (int j = 0; j < iNumberOfParticles; j++){
+			pEigenvaluesOld[i][j] = pEigenvalues[i][j] 	
+		}
+	}
+}
+#endif
+
+HFmatrix A(2);
+//A.transform(ddUnity);
+A.diagonalize(pEigenvalues,ddUnitaryMatrix);
+A.transform(ddUnitaryMatrix);
+A.diagonalize(pEigenvalues,ddUnitaryMatrix);
+A.transform(ddUnitaryMatrix);
+A.diagonalize(pEigenvalues,ddUnitaryMatrix);
+A.transform(ddUnitaryMatrix);
+A.diagonalize(pEigenvalues,ddUnitaryMatrix);
+
+#if 0
+if (iNumberOfIterations>1){
+	for {int i = 0; i < iNumberOfParticles i++){
+		for (int j = 0; j < iNumberOfParticles; j++){
+			pEigenvaluesOld[i][j] = pEigenvalues[i][j] 	
+		}
+	}
+}
+#endif
+
+#if 0
+for (int nt nConverged = 0;
+	for (int i = 0; i < iNumberOfParticles; i++) {
+		if (abs((dPrevious[i] - d[i])/d[i]) < 1e-6) { //init tol on top of program
+		nConverged++;
+	}
+}
+#endif
+
+#if 0
+if (nConverged == 2*nCutoff) {
+	converged = true;
+}
+
+} //while loos stops here; while (convergence)
+#endif
+
+for (int i=0;i<4;i++){
+for (int j=0;j<4;j++){
+cout<<", \t\t"<<ddUnitaryMatrix[i][j];
+}
+	cout<<"\n";
+	}
+}//End of Main().
+//endvimfold
+
+// For vim users: Defining vimfolds.
+// vim:fdm=marker:fmr=//startvimfold,//endvimfold
