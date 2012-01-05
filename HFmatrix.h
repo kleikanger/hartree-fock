@@ -10,7 +10,8 @@ class HFmatrix{
     double dIntLimMin;
     double dIntLimMax;
 	double* pOrbitalEnergies;;
-
+	double** ddUnitaryMatrix;
+	
 	//Methods
 
 	public:
@@ -18,8 +19,9 @@ class HFmatrix{
 
 	//Methods (member functions)
 	HFmatrix(int);
-	void transform(double**);
-	void diagonalize(double*, double**);
-	
+	void transform();
+	void diagonalize(double*);
+	double findEnergy();	
+
 };
 

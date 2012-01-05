@@ -32,14 +32,13 @@ HFmatrix::HFmatrix(int nCutoff){ //XXX May need more parameters as input.
 	//XXX Should may be part of constructor call?
 	iNumberOfParticles=2*nCutoff;
 	//There might be a lot of round off error with to many terms because of roundofferror in the integration routine.	
-	//For some reason, david's integrationroutine with two separate inner and outer integrals converged much faster (?).
+	//For some reason, (that i know of) david's integrationroutine with two separate inner and outer integrals is more efficient.
 	
 	//Calc of matrix elements O(iNrMeshpt**2) 
-	iNrMeshpt=1500;
+	iNrMeshpt=5000;
 	dIntLimMin=0.0;
 	dIntLimMax=250.0;
 	
-	double **ddUnity;
 
     //Declare elements of variable:coulombIntegrals:
     coulombIntegrals = new double***[nCutoff];
@@ -78,11 +77,11 @@ HFmatrix::HFmatrix(int nCutoff){ //XXX May need more parameters as input.
 		}
 	
 	//Declaring and constructing unity matrix	
-  	ddUnity = (double **) matrix( iNumberOfParticles, iNumberOfParticles , sizeof(double));
+	ddUnitaryMatrix = (double **) matrix( iNumberOfParticles, iNumberOfParticles , sizeof(double));
 	for (int a=0; a< iNumberOfParticles; a++){
-		ddUnity[a][a]=1.0;
+		ddUnitaryMatrix[a][a]=1.0;
 		for (int b=a+1; b< iNumberOfParticles; b++){
- 			ddUnity[a][b]=ddUnity[b][a]=0.0;
+ 			ddUnitaryMatrix[a][b]=ddUnitaryMatrix[b][a]=0.0;
 		}
 	}
 	//initializing eigenvalues(energies) of orbitals
@@ -94,9 +93,9 @@ HFmatrix::HFmatrix(int nCutoff){ //XXX May need more parameters as input.
 	//Declare elements of variable:ppHFdata
  	ppHFdata= (double **) matrix( iNumberOfParticles, iNumberOfParticles, sizeof(double));
 	
-	//Finding initial matrix
-	transform(ddUnity);
-	
+	//Initializing	
+	transform();	
+
 	#if A
 	//Prin test
 	for (int i=0;i<4;i++){
@@ -115,7 +114,7 @@ HFmatrix::HFmatrix(int nCutoff){ //XXX May need more parameters as input.
 //plus the orbital energies to construct a new unitary matric. Recoves small terms, and sorts
 //the eigenenergies and corresponding eigenvectors, smallest elements first, for more stable 
 //householder, QLDC (??) in the next iteration.
-void HFmatrix::transform(double ** ddUnitaryMatrix){
+void HFmatrix::transform(){
 //startvimfold
 
 	//Temporary variables
@@ -130,6 +129,7 @@ void HFmatrix::transform(double ** ddUnitaryMatrix){
 				for (int beta = 0; beta < iNumberOfParticles; beta++) {
 					for (int delta = 0; delta < iNumberOfParticles; delta++) {
 						//Need to ensure that 13 and 24 has same spin (correct acc. to the convention in this code).
+						//Hartree and fock part separate.
 						Atemp=0.0;
 						Btemp=0.0;
 						if ( alpha%2==delta%2 && beta%2==gamma%2 ){
@@ -155,7 +155,7 @@ void HFmatrix::transform(double ** ddUnitaryMatrix){
 
 //Changes rows of ddUnitaryMatrix to eigenvectors and pEigenvalues to the eigenvalues the HF-matrix
 //Sorting eigenvalues in ddUnitaryMatrix
-void HFmatrix::diagonalize(double* pEigenvalues, double** ddUnitaryMatrix){
+void HFmatrix::diagonalize(double* pEigenvalues){
 //startvimfold
 
 	//Temporary variable. Needed because of the way tred2 and tqli are programmed in lib.cpp
@@ -207,10 +207,11 @@ void HFmatrix::diagonalize(double* pEigenvalues, double** ddUnitaryMatrix){
 	}
 #if PRINT
 	cout.precision(10);
+	cout << "Eigenvalues:\n";
 	for (i=0;i<4;i++){
 	cout<<pEigenvalues[i]<<","<<iSortIndex[i]<<"\n";
 	}
-cout<<"\n\n\n";
+cout<<"\n\n Unitary matrix:\n";
 	for (i=0;i<4;i++){
 	for (j=0;j<4;j++){
 	cout<<ddUnitaryMatrix[i][j]<<"\t\t";
@@ -219,6 +220,42 @@ cout<<"\n\n\n";
 #endif
 
 }//End of function HFmatrix::diagonalize: 
+//endvimfold
+
+//Returns the energy of the state. (Davids Mehod)
+double HFmatrix::findEnergy(){
+//startvimfold
+    double energy = 0;
+    for (int a = 0; a < iNumberOfParticles; a++) { //Z
+        for (int beta = 0; beta < iNumberOfParticles; beta++) {
+            energy += ddUnitaryMatrix[a][beta]*ddUnitaryMatrix[a][beta]*pOrbitalEnergies[beta/2];
+        }
+    }
+	double Atemp,Btemp;
+    for (int a = 0; a < iNumberOfParticles; a++) { //Z
+        for (int b = 0; b < iNumberOfParticles; b++) { //Z
+            for (int mu = 0; mu < iNumberOfParticles; mu++) {
+                for (int nu = 0; nu < iNumberOfParticles; nu++) {
+                    for (int beta = 0; beta < iNumberOfParticles; beta++) {
+                        for (int delta = 0; delta < iNumberOfParticles; delta++) {
+						Atemp=Btemp=0;
+						//Fock and Hartree part: (making sure spin is correct.)
+						if ( mu%2==delta%2 && nu%2==beta%2 ){
+							Btemp = coulombIntegrals[mu/2][nu/2][delta/2][beta/2]; 
+						}
+						if ( mu%2==beta%2 && nu%2==delta%2 ){
+							Atemp = coulombIntegrals[mu/2][nu/2][beta/2][delta/2]; 
+						}
+						energy  += 0.5 * ddUnitaryMatrix[b][nu] * ddUnitaryMatrix[a][beta] 
+							* ddUnitaryMatrix[a][mu] * ddUnitaryMatrix[b][delta] * (Atemp-Btemp); 
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return energy;
+}//End of method HFmatrix::findEnergy();
 //endvimfold
 
 //Finding <ab|V|cd>. This is the heaviest operation. Must be rewritten for larger other systems. 
@@ -239,7 +276,7 @@ double hFMatrixElements(int iNa,int iNb,int iNc,int iNd,int iNumberOfParticles, 
 	double dInt_gl=0.0;
 	
 	//temporary variables
-	double dInnerint,dInt1,dInt2;
+	double dInt1,dInt2;
 	
 	//Summation over all meshpoints
 	for (int x_1=0;x_1<iNrMeshpt;x_1++){
@@ -325,27 +362,12 @@ int main(){
 //Only needed in this method
 	int iNumberOfParticles=4;
 
-//declaring and constructing nxn matrix	
-	double **ddUnitaryMatrix;
-	ddUnitaryMatrix = (double **) matrix( iNumberOfParticles, iNumberOfParticles , sizeof(double));
-/*for (int a=0; a< inumberofparticles; a++){
-	ddunitarymatrix[a][a]=1.0;
-	for (int b=a+1; b< inumberofparticles; b++){
- 			ddunitarymatrix[a][b]=ddunitarymatrix[b][a]=0.0;
-	}
-}*/
-
 	double* pEigenvalues = new double[iNumberOfParticles];
 	double* pEigenvaluesOld = new double[iNumberOfParticles];// = new double[iNumberOfParticles];
-			for (int i = 0; i < iNumberOfParticles; i++){
-				pEigenvaluesOld[i] = 0; 	
-			}
 
 	bool bIterate = true;
 	int iNumberOfIterations = 0;
 	int iConverged;
-
-
 
 	//Initializing hartree-fock matrix object
 	HFmatrix A(2);
@@ -353,10 +375,10 @@ int main(){
 	//Start iterations
 	while (bIterate) {
 
-		A.diagonalize(pEigenvalues,ddUnitaryMatrix);
-		A.transform(ddUnitaryMatrix);
-		if (iNumberOfIterations>0){
-			
+		A.diagonalize(pEigenvalues);
+		A.transform();
+		
+		if (iNumberOfIterations>0){	
 			iConverged = 0;
 			for (int i = 0; i < iNumberOfParticles; i++) {
 				if (abs((pEigenvaluesOld[i] - pEigenvalues[i])/pEigenvalues[i]) < 1e-6) { //init tol on top of program
@@ -374,22 +396,16 @@ int main(){
 		iNumberOfIterations++;
 	}//End of while (bIterate)
 
-cout << "Antall iterasjoner = " << iNumberOfIterations;
+cout << "Antall iterasjoner = " << iNumberOfIterations <<"\n";
 
 //Calculate energy
-	//HFmatrix::<method> needed for calculating energy
-	//method needed for writing data to file
+cout<<"Energy "<< A.findEnergy();
 
-//Write comments
+//method needed for writing data to file
 
-//TESTING
-/*for (int i=0;i<4;i++){
-for (int j=0;j<4;j++){
-cout<<", \t\t"<<ddUnitaryMatrix[i][j];
-}
-	cout<<"\n";
-	}
-*/
+//HFmatrix::<method> return ddUnitaryMatrix
+//HFmatrix::<method> return eigenvecs
+
 delete[] pEigenvalues;
 delete[] pEigenvaluesOld;
 }//End of Main().
